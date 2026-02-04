@@ -334,11 +334,11 @@
 
     .batch-btn:hover { transform: scale(1.05); filter: brightness(1.1); }
 
-    /* 预览弹窗 */
+    /* 预览弹窗 - 支持图片和 iframe */
     .preview-modal {
       position: fixed;
       top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(0, 0, 0, 0.9);
+      background: rgba(0, 0, 0, 0.95);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -351,6 +351,33 @@
       max-height: 90%;
       border-radius: 8px;
       box-shadow: 0 0 50px rgba(0, 0, 0, 0.5);
+    }
+
+    .preview-modal .iframe-container {
+      width: 90%;
+      max-width: 1200px;
+      position: relative;
+    }
+
+    .preview-modal .iframe-container.video {
+      aspect-ratio: 16 / 9;
+      max-height: 80vh;
+    }
+
+    .preview-modal .iframe-container.audio {
+      height: 200px;
+      max-width: 500px;
+    }
+
+    .preview-modal .iframe-container.image {
+      height: 80vh;
+    }
+
+    .preview-modal .iframe-container iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+      border-radius: 8px;
     }
 
     .preview-close {
@@ -872,15 +899,41 @@
       </button>
     </div>
 
-    <!-- 预览弹窗 -->
-    <div class="preview-modal" v-if="previewImg" @click="previewImg = null">
-      <button class="preview-close" @click="previewImg = null">
+    <!-- 预览弹窗 - 使用统一媒体预览服务 -->
+    <div class="preview-modal" v-if="previewData" @click="closePreview">
+      <button class="preview-close" @click="closePreview">
         <i class="fas fa-times"></i>
       </button>
-      <img :src="'/file/' + previewImg.name" @click.stop>
+      <!-- 图片预览 - 使用 iframe -->
+      <div v-if="previewData.type === 'image'" class="iframe-container image" @click.stop>
+        <iframe 
+          ref="previewIframe"
+          :src="previewData.iframeUrl"
+          allow="autoplay; fullscreen; encrypted-media"
+          allowfullscreen>
+        </iframe>
+      </div>
+      <!-- 视频预览 - 使用 iframe -->
+      <div v-else-if="previewData.type === 'video'" class="iframe-container video" @click.stop>
+        <iframe 
+          ref="previewIframe"
+          :src="previewData.iframeUrl"
+          allow="autoplay; fullscreen; encrypted-media"
+          allowfullscreen>
+        </iframe>
+      </div>
+      <!-- 音频预览 - 使用 iframe -->
+      <div v-else-if="previewData.type === 'audio'" class="iframe-container audio" @click.stop>
+        <iframe 
+          ref="previewIframe"
+          :src="previewData.iframeUrl"
+          allow="autoplay; fullscreen; encrypted-media"
+          allowfullscreen>
+        </iframe>
+      </div>
       <div class="preview-info" @click.stop>
-        <span class="preview-link">{{ formatLink(previewImg) }}</span>
-        <button class="batch-btn primary" @click="copyLink(previewImg)">
+        <span class="preview-link">{{ previewData.url }}</span>
+        <button class="batch-btn primary" @click="copyPreviewLink">
           <i class="fas fa-copy"></i> 复制
         </button>
       </div>
@@ -898,6 +951,9 @@
   <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/element-ui@2.15.3/lib/index.js"></script>
   <script>
+    // 统一媒体预览服务基础 URL
+    const PREVIEW_SERVICE_BASE = 'https://www.katelya.eu.org';
+
     new Vue({
       el: '#app',
       data: {
@@ -910,7 +966,7 @@
         pageSize: 30,
         nextCursor: null,
         hasMore: true,
-        previewImg: null,
+        previewData: null,  // 新的预览数据对象
         toasts: [],
         searchTimer: null
       },
@@ -1115,7 +1171,74 @@
         },
 
         previewImage(img) {
-          this.previewImg = img;
+          // 使用统一媒体预览服务
+          const fileName = img.metadata?.fileName || img.name;
+          const fileUrl = `${this.baseURL}/file/${img.name}`;
+          const ext = fileName.split('.').pop().toLowerCase();
+          
+          // 判断文件类型
+          let type = 'image';
+          let iframeUrl = '';
+          
+          const videoExts = ['mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv'];
+          const audioExts = ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'wma', 'opus'];
+          const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'ico'];
+          
+          if (videoExts.includes(ext)) {
+            type = 'video';
+            const params = new URLSearchParams({
+              url: fileUrl,
+              title: fileName,
+              autoplay: '1',
+              proxy: '1'
+            });
+            iframeUrl = `${PREVIEW_SERVICE_BASE}/preview/video?${params.toString()}`;
+          } else if (audioExts.includes(ext)) {
+            type = 'audio';
+            const params = new URLSearchParams({
+              url: fileUrl,
+              title: fileName,
+              artist: 'TelegramFile',
+              proxy: '1'
+            });
+            iframeUrl = `${PREVIEW_SERVICE_BASE}/preview/audio?${params.toString()}`;
+          } else if (imageExts.includes(ext)) {
+            type = 'image';
+            const params = new URLSearchParams({
+              url: fileUrl,
+              title: fileName,
+              fit: 'contain'
+            });
+            iframeUrl = `${PREVIEW_SERVICE_BASE}/preview/image?${params.toString()}`;
+          } else {
+            // 不支持的类型，跳转到预览页
+            window.open(`./preview.html?file=${encodeURIComponent(img.name)}`, '_blank');
+            return;
+          }
+          
+          this.previewData = {
+            type: type,
+            iframeUrl: iframeUrl,
+            url: fileUrl,
+            fileName: fileName,
+            img: img
+          };
+        },
+
+        // 关闭预览并销毁 iframe
+        closePreview() {
+          if (this.$refs.previewIframe) {
+            this.$refs.previewIframe.src = 'about:blank';
+          }
+          this.previewData = null;
+        },
+
+        // 复制预览链接
+        copyPreviewLink() {
+          if (this.previewData) {
+            this.copyToClipboard(this.previewData.url);
+            this.showToast('链接已复制', 'success');
+          }
         },
 
         downloadImage(img) {
@@ -1203,8 +1326,8 @@
 
         // 键盘快捷键
         document.addEventListener('keydown', (e) => {
-          if (e.key === 'Escape' && this.previewImg) {
-            this.previewImg = null;
+          if (e.key === 'Escape' && this.previewData) {
+            this.closePreview();
           }
         });
       }

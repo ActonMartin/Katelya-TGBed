@@ -7,13 +7,8 @@
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="icon" type="image/x-icon" href="/favicon.ico">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free/css/all.min.css">
-  <!-- PDF.js -->
+  <!-- PDF.js (仅用于 PDF 预览) -->
   <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-  <!-- Artplayer 视频播放器 -->
-  <script src="https://cdn.jsdelivr.net/npm/artplayer@5.1.7/dist/artplayer.js"></script>
-  <!-- APlayer 音频播放器 -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/aplayer@1.10.1/dist/APlayer.min.css">
-  <script src="https://cdn.jsdelivr.net/npm/aplayer@1.10.1/dist/APlayer.min.js"></script>
   <style>
     :root {
       --primary-color: #8a4bff;
@@ -190,25 +185,42 @@
       max-width: 100%;
       max-height: 70vh;
       object-fit: contain;
+      cursor: pointer;
     }
 
-    /* 视频预览 - Artplayer */
-    .video-container {
+    /* 统一媒体预览 - iframe 容器 */
+    .iframe-preview-container {
       width: 100%;
-      max-width: 100%;
       position: relative;
-    }
-
-    #artplayer-container {
-      width: 100%;
-      height: 480px;
-      max-height: 70vh;
       border-radius: 8px;
       overflow: hidden;
       background: #000;
     }
 
-    .video-error {
+    .iframe-preview-container.video {
+      aspect-ratio: 16 / 9;
+      max-height: 70vh;
+    }
+
+    .iframe-preview-container.audio {
+      height: 200px;
+      max-width: 500px;
+      margin: 0 auto;
+      background: linear-gradient(135deg, var(--primary-color), var(--primary-light));
+    }
+
+    .iframe-preview-container.image {
+      min-height: 400px;
+      max-height: 70vh;
+    }
+
+    .iframe-preview-container iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+
+    .preview-error {
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -219,62 +231,9 @@
       min-height: 200px;
     }
 
-    .video-error i {
+    .preview-error i {
       font-size: 3em;
       margin-bottom: 16px;
-    }
-
-    /* 音频预览 - APlayer */
-    .preview-audio-container {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      text-align: center;
-      padding: 40px 20px;
-      width: 100%;
-    }
-
-    .audio-cover {
-      width: 120px;
-      height: 120px;
-      border-radius: 50%;
-      background: linear-gradient(135deg, var(--primary-color), var(--primary-light));
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin-bottom: 24px;
-      box-shadow: 0 8px 24px rgba(138, 75, 255, 0.2);
-    }
-
-    .audio-cover.playing {
-      animation: rotate 4s linear infinite;
-    }
-
-    @keyframes rotate {
-      from { transform: rotate(0deg); }
-      to { transform: rotate(360deg); }
-    }
-
-    .audio-cover i {
-      font-size: 3em;
-      color: white;
-    }
-
-    #aplayer-container {
-      width: 100%;
-      max-width: 400px;
-      margin-top: 20px;
-    }
-
-    /* APlayer 主题适配 */
-    .aplayer {
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08) !important;
-      border-radius: 12px !important;
-    }
-
-    .aplayer .aplayer-lrc {
-      display: none;
     }
 
     /* PDF 预览 */
@@ -537,9 +496,12 @@
         max-height: 50vh;
       }
 
-      #artplayer-container {
-        height: 280px;
+      .iframe-preview-container.video {
         max-height: 50vh;
+      }
+
+      .iframe-preview-container.audio {
+        height: 180px;
       }
 
       .preview-pdf,
@@ -634,9 +596,12 @@
         max-height: 40vh;
       }
 
-      #artplayer-container {
-        height: 220px;
+      .iframe-preview-container.video {
         max-height: 45vh;
+      }
+
+      .iframe-preview-container.audio {
+        height: 160px;
       }
 
       .preview-pdf,
@@ -649,14 +614,6 @@
         font-size: 12px;
         padding: 12px;
         line-height: 1.5;
-      }
-
-      .preview-audio-container {
-        padding: 24px 16px;
-      }
-
-      .audio-icon {
-        font-size: 3em;
       }
 
       .preview-unsupported {
@@ -782,37 +739,34 @@
           </button>
         </div>
 
-        <!-- 图片预览 -->
-        <img v-if="previewType === 'image' && !loading" 
-             :src="fileUrl" 
-             class="preview-image"
-             @load="onImageLoad"
-             @error="onLoadError">
-
-        <!-- 视频预览 - Artplayer -->
-        <div v-else-if="previewType === 'video'" class="video-container">
-          <div v-if="!videoError" id="artplayer-container" ref="artplayerContainer"></div>
-          <div v-else class="video-error">
-            <i class="fas fa-exclamation-triangle"></i>
-            <h3>视频加载失败</h3>
-            <p style="margin: 12px 0; color: #999;">该视频格式可能不被浏览器支持</p>
-            <button class="btn btn-primary" @click="downloadFile">
-              <i class="fas fa-download"></i> 下载视频
-            </button>
-          </div>
+        <!-- 图片预览 - 使用 iframe 预览服务 -->
+        <div v-if="previewType === 'image' && !loading" 
+             class="iframe-preview-container image"
+             @click="openImageInIframe">
+          <img :src="fileUrl" 
+               class="preview-image"
+               @load="onImageLoad"
+               @error="onLoadError">
         </div>
 
-        <!-- 音频预览 - APlayer -->
-        <div v-else-if="previewType === 'audio'" class="preview-audio-container">
-          <div class="audio-cover" :class="{ playing: isAudioPlaying }">
-            <i class="fas fa-music"></i>
-          </div>
-          <h3 style="margin-bottom: 8px; color: #333;">{{ fileName }}</h3>
-          <p style="color: #999; font-size: 0.85em; margin-bottom: 16px;">{{ fileType }} 音频文件</p>
-          <div id="aplayer-container" ref="aplayerContainer"></div>
-          <div v-if="audioError" style="margin-top: 16px; color: #f56c6c;">
-            <i class="fas fa-exclamation-circle"></i> 音频加载失败，请尝试下载后播放
-          </div>
+        <!-- 视频预览 - 使用统一媒体预览服务 -->
+        <div v-else-if="previewType === 'video' && !loading" class="iframe-preview-container video">
+          <iframe 
+            ref="videoIframe"
+            :src="videoPreviewUrl"
+            allow="autoplay; fullscreen; encrypted-media"
+            allowfullscreen>
+          </iframe>
+        </div>
+
+        <!-- 音频预览 - 使用统一媒体预览服务 -->
+        <div v-else-if="previewType === 'audio' && !loading" class="iframe-preview-container audio">
+          <iframe 
+            ref="audioIframe"
+            :src="audioPreviewUrl"
+            allow="autoplay; fullscreen; encrypted-media"
+            allowfullscreen>
+          </iframe>
         </div>
 
         <!-- PDF 预览 -->
@@ -875,6 +829,9 @@
   <script src="https://cdn.jsdelivr.net/npm/nsfwjs@2.4.2/dist/nsfwjs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0/dist/tf.min.js"></script>
   <script>
+    // 统一媒体预览服务基础 URL
+    const PREVIEW_SERVICE_BASE = 'https://www.katelya.eu.org';
+
     new Vue({
       el: '#app',
       data: {
@@ -889,12 +846,7 @@
         showNsfw: false,
         safeMode: true,
         dataSaverMode: false,
-        nsfwModel: null,
-        videoError: false,
-        audioError: false,
-        isAudioPlaying: false,
-        artplayer: null,
-        aplayer: null
+        nsfwModel: null
       },
       computed: {
         fileIcon() {
@@ -909,13 +861,44 @@
           };
           return iconMap[this.previewType] || 'fas fa-file';
         },
+        // 获取文件完整 URL
+        fullFileUrl() {
+          const fileUrlPath = this.fileUrl.startsWith('/') ? this.fileUrl : `/file/${this.fileUrl}`;
+          return window.location.origin + fileUrlPath;
+        },
+        // 视频预览 URL - 使用统一媒体预览服务
+        videoPreviewUrl() {
+          const params = new URLSearchParams({
+            url: this.fullFileUrl,
+            title: this.fileName,
+            autoplay: '1',
+            proxy: '1'  // 启用代理以支持进度条拖动
+          });
+          return `${PREVIEW_SERVICE_BASE}/preview/video?${params.toString()}`;
+        },
+        // 音频预览 URL - 使用统一媒体预览服务
+        audioPreviewUrl() {
+          const params = new URLSearchParams({
+            url: this.fullFileUrl,
+            title: this.fileName,
+            artist: 'TelegramFile',
+            proxy: '1'  // 启用代理
+          });
+          return `${PREVIEW_SERVICE_BASE}/preview/audio?${params.toString()}`;
+        },
+        // 图片预览 URL - 使用统一媒体预览服务
+        imagePreviewUrl() {
+          const params = new URLSearchParams({
+            url: this.fullFileUrl,
+            title: this.fileName,
+            fit: 'contain'
+          });
+          return `${PREVIEW_SERVICE_BASE}/preview/image?${params.toString()}`;
+        },
         officeViewerUrl() {
           // 使用 Microsoft Office Online Viewer
-          // 确保生成完整的绝对 URL（必须是公网可访问的链接）
-          const fileUrlPath = this.fileUrl.startsWith('/') ? this.fileUrl : `/file/${this.fileUrl}`;
-          const fullUrl = window.location.origin + fileUrlPath;
           // URL 必须经过正确编码
-          return `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(fullUrl)}`;
+          return `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(this.fullFileUrl)}`;
         }
       },
       methods: {
@@ -979,17 +962,11 @@
           if (this.previewType === 'text') {
             await this.loadTextContent();
           } else if (this.previewType === 'video') {
-            // 视频使用 Artplayer
+            // 视频使用统一媒体预览服务 iframe
             this.loading = false;
-            this.$nextTick(() => {
-              this.initArtplayer();
-            });
           } else if (this.previewType === 'audio') {
-            // 音频使用 APlayer
+            // 音频使用统一媒体预览服务 iframe
             this.loading = false;
-            this.$nextTick(() => {
-              this.initAPlayer();
-            });
           } else if (this.previewType === 'image') {
             // 图片：先设置 loading = false 让图片开始加载，onImageLoad 会处理后续
             this.loading = false;
@@ -1051,192 +1028,21 @@
           this.previewType = 'unsupported';
         },
 
-        // 初始化 Artplayer 视频播放器
-        initArtplayer() {
-          const container = this.$refs.artplayerContainer;
-          if (!container) {
-            console.error('Artplayer container not found');
-            this.videoError = true;
-            return;
+        // 打开图片预览 iframe（点击图片时打开全功能预览）
+        openImageInIframe() {
+          window.open(this.imagePreviewUrl, '_blank');
+        },
+
+        // 销毁 iframe（清理资源）
+        destroyIframes() {
+          // 销毁视频 iframe
+          if (this.$refs.videoIframe) {
+            this.$refs.videoIframe.src = 'about:blank';
           }
-
-          try {
-            // 获取视频类型
-            const ext = this.fileName.split('.').pop().toLowerCase();
-            const mimeTypes = {
-              'mp4': 'video/mp4',
-              'webm': 'video/webm',
-              'ogg': 'video/ogg',
-              'mov': 'video/quicktime',
-              'avi': 'video/x-msvideo',
-              'mkv': 'video/x-matroska',
-              'm4v': 'video/x-m4v'
-            };
-            const mimeType = mimeTypes[ext] || 'video/mp4';
-
-            // 确保使用本站代理链接（相对路径自动指向本站）
-            const videoUrl = this.fileUrl.startsWith('/') ? this.fileUrl : `/file/${this.fileUrl}`;
-
-            this.artplayer = new Artplayer({
-              container: container,
-              url: videoUrl,
-              type: mimeType,
-              volume: 0.7,
-              isLive: false,
-              muted: false,
-              autoplay: false,
-              pip: true,
-              autoSize: false,
-              autoMini: false,
-              screenshot: true,
-              setting: true,
-              loop: false,
-              flip: true,
-              playbackRate: true,
-              aspectRatio: true,
-              fullscreen: true,
-              fullscreenWeb: true,
-              subtitleOffset: false,
-              miniProgressBar: true,
-              mutex: true,
-              backdrop: true,
-              playsInline: true,
-              autoPlayback: true,
-              airplay: true,
-              theme: '#8a4bff',
-              lang: navigator.language.toLowerCase().includes('zh') ? 'zh-cn' : 'en',
-              // 预加载 metadata 以支持进度条拖拽
-              moreVideoAttr: {
-                preload: 'metadata'
-              }
-            });
-
-            // 监听错误事件
-            this.artplayer.on('error', (error) => {
-              console.error('Artplayer error:', error);
-              // 不立即显示错误，给播放器重试机会
-              setTimeout(() => {
-                if (this.artplayer && !this.artplayer.playing) {
-                  this.videoError = true;
-                }
-              }, 3000);
-            });
-
-            // 监听准备就绪
-            this.artplayer.on('ready', () => {
-              console.log('Artplayer ready');
-              this.videoError = false;
-            });
-
-            // 监听视频加载
-            this.artplayer.on('video:loadedmetadata', () => {
-              console.log('Video metadata loaded');
-              this.videoError = false;
-            });
-
-          } catch (e) {
-            console.error('Artplayer init error:', e);
-            this.videoError = true;
+          // 销毁音频 iframe
+          if (this.$refs.audioIframe) {
+            this.$refs.audioIframe.src = 'about:blank';
           }
-        },
-
-        // 初始化 APlayer 音频播放器
-        initAPlayer() {
-          const container = this.$refs.aplayerContainer;
-          if (!container) {
-            console.error('APlayer container not found');
-            this.audioError = true;
-            return;
-          }
-
-          try {
-            // 确保使用本站代理链接
-            const audioUrl = this.fileUrl.startsWith('/') ? this.fileUrl : `/file/${this.fileUrl}`;
-
-            this.aplayer = new APlayer({
-              container: container,
-              audio: [{
-                name: this.fileName,
-                artist: '未知艺术家',
-                url: audioUrl,
-                cover: ''
-              }],
-              theme: '#8a4bff',
-              loop: 'none',
-              preload: 'metadata',  // 使用 metadata 预加载，支持 Range 请求
-              volume: 0.7,
-              mutex: true,
-              listFolded: true
-            });
-
-            // 监听播放状态
-            this.aplayer.on('play', () => {
-              this.isAudioPlaying = true;
-            });
-
-            this.aplayer.on('pause', () => {
-              this.isAudioPlaying = false;
-            });
-
-            this.aplayer.on('ended', () => {
-              this.isAudioPlaying = false;
-            });
-
-            this.aplayer.on('error', () => {
-              console.error('APlayer error');
-              this.audioError = true;
-            });
-
-            // 监听加载成功
-            this.aplayer.on('loadedmetadata', () => {
-              console.log('Audio metadata loaded');
-              this.audioError = false;
-            });
-
-          } catch (e) {
-            console.error('APlayer init error:', e);
-            this.audioError = true;
-          }
-        },
-
-        // 销毁播放器
-        destroyPlayers() {
-          if (this.artplayer) {
-            this.artplayer.destroy();
-            this.artplayer = null;
-          }
-          if (this.aplayer) {
-            this.aplayer.destroy();
-            this.aplayer = null;
-          }
-        },
-
-        onVideoLoaded() {
-          this.loading = false;
-        },
-
-        onVideoReady() {
-          this.loading = false;
-          this.videoError = false;
-        },
-
-        onVideoError() {
-          this.loading = false;
-          this.videoError = true;
-        },
-
-        onAudioLoaded() {
-          this.loading = false;
-        },
-
-        onAudioReady() {
-          this.loading = false;
-          this.audioError = false;
-        },
-
-        onAudioError() {
-          this.loading = false;
-          this.audioError = true;
         },
 
         copyLink() {
@@ -1291,7 +1097,8 @@
         this.init();
       },
       beforeDestroy() {
-        this.destroyPlayers();
+        // 销毁 iframe 防止后台继续播放
+        this.destroyIframes();
       }
     });
   </script>

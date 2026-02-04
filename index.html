@@ -718,14 +718,14 @@
       background: rgba(138, 75, 255, 0.7);
     }
 
-    /* 图片预览弹窗 */
+    /* 图片预览弹窗 - 支持 iframe */
     .preview-modal {
       position: fixed;
       top: 0;
       left: 0;
       right: 0;
       bottom: 0;
-      background: rgba(0, 0, 0, 0.9);
+      background: rgba(0, 0, 0, 0.95);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -736,6 +736,33 @@
     .preview-modal img {
       max-width: 100%;
       max-height: 100%;
+      border-radius: 8px;
+    }
+
+    .preview-modal .iframe-container {
+      width: 90%;
+      max-width: 1200px;
+      position: relative;
+    }
+
+    .preview-modal .iframe-container.video {
+      aspect-ratio: 16 / 9;
+      max-height: 80vh;
+    }
+
+    .preview-modal .iframe-container.audio {
+      height: 200px;
+      max-width: 500px;
+    }
+
+    .preview-modal .iframe-container.image {
+      height: 80vh;
+    }
+
+    .preview-modal .iframe-container iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
       border-radius: 8px;
     }
 
@@ -1480,12 +1507,40 @@
       </div>
     </div>
 
-    <!-- 图片预览弹窗 -->
-    <div class="preview-modal" v-if="previewUrl" @click="previewUrl = null">
-      <button class="preview-close" @click="previewUrl = null">
+    <!-- 预览弹窗 - 使用统一媒体预览服务 -->
+    <div class="preview-modal" v-if="previewData" @click="closePreview">
+      <button class="preview-close" @click="closePreview">
         <i class="fas fa-times"></i>
       </button>
-      <img :src="previewUrl" @click.stop>
+      <!-- 图片直接预览 -->
+      <img v-if="previewData.type === 'simple-image'" :src="previewData.url" @click.stop>
+      <!-- 图片 iframe 预览 -->
+      <div v-else-if="previewData.type === 'image'" class="iframe-container image" @click.stop>
+        <iframe 
+          ref="previewIframe"
+          :src="previewData.iframeUrl"
+          allow="autoplay; fullscreen; encrypted-media"
+          allowfullscreen>
+        </iframe>
+      </div>
+      <!-- 视频预览 -->
+      <div v-else-if="previewData.type === 'video'" class="iframe-container video" @click.stop>
+        <iframe 
+          ref="previewIframe"
+          :src="previewData.iframeUrl"
+          allow="autoplay; fullscreen; encrypted-media"
+          allowfullscreen>
+        </iframe>
+      </div>
+      <!-- 音频预览 -->
+      <div v-else-if="previewData.type === 'audio'" class="iframe-container audio" @click.stop>
+        <iframe 
+          ref="previewIframe"
+          :src="previewData.iframeUrl"
+          allow="autoplay; fullscreen; encrypted-media"
+          allowfullscreen>
+        </iframe>
+      </div>
     </div>
 
     <!-- Toast 容器 -->
@@ -1500,6 +1555,9 @@
   <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/element-ui@2.15.3/lib/index.js"></script>
   <script>
+    // 统一媒体预览服务基础 URL
+    const PREVIEW_SERVICE_BASE = 'https://www.katelya.eu.org';
+
     new Vue({
       el: '#app',
       data: {
@@ -1512,7 +1570,7 @@
         uploadedFiles: [],
         uploadHistory: [],
         linkFormat: 'url',
-        previewUrl: null,
+        previewData: null,  // 新的预览数据对象
         toasts: [],
         isAuthenticated: false,
         storageMode: 'telegram', // 存储模式：telegram 或 r2
@@ -1938,23 +1996,74 @@
           link.click();
         },
 
-        // 预览图片
+        // 预览图片（简单模式 - 直接显示图片）
         previewImage(url) {
-          this.previewUrl = url;
+          this.previewData = {
+            type: 'simple-image',
+            url: url
+          };
         },
 
-        // 打开预览页面
+        // 打开预览页面 - 使用统一媒体预览服务
         openPreview(file) {
-          const ext = file.name.split('.').pop().toLowerCase();
+          const fileName = file.name || file.fileName;
+          const fileUrl = file.url;
+          const ext = fileName.split('.').pop().toLowerCase();
+          
+          // 判断文件类型
+          const videoExts = ['mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv'];
+          const audioExts = ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'wma', 'opus'];
           const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'ico'];
           
-          if (imageExts.includes(ext)) {
-            // 图片直接在弹窗预览
-            this.previewUrl = file.url;
+          let type = '';
+          let iframeUrl = '';
+          
+          if (videoExts.includes(ext)) {
+            type = 'video';
+            const params = new URLSearchParams({
+              url: fileUrl,
+              title: fileName,
+              autoplay: '1',
+              proxy: '1'
+            });
+            iframeUrl = `${PREVIEW_SERVICE_BASE}/preview/video?${params.toString()}`;
+          } else if (audioExts.includes(ext)) {
+            type = 'audio';
+            const params = new URLSearchParams({
+              url: fileUrl,
+              title: fileName,
+              artist: 'TelegramFile',
+              proxy: '1'
+            });
+            iframeUrl = `${PREVIEW_SERVICE_BASE}/preview/audio?${params.toString()}`;
+          } else if (imageExts.includes(ext)) {
+            type = 'image';
+            const params = new URLSearchParams({
+              url: fileUrl,
+              title: fileName,
+              fit: 'contain'
+            });
+            iframeUrl = `${PREVIEW_SERVICE_BASE}/preview/image?${params.toString()}`;
           } else {
-            // 其他文件跳转到预览页
+            // 不支持的类型，跳转到预览页
             window.open(`./preview.html?file=${encodeURIComponent(file.path)}`, '_blank');
+            return;
           }
+          
+          this.previewData = {
+            type: type,
+            iframeUrl: iframeUrl,
+            url: fileUrl,
+            fileName: fileName
+          };
+        },
+
+        // 关闭预览并销毁 iframe
+        closePreview() {
+          if (this.$refs.previewIframe) {
+            this.$refs.previewIframe.src = 'about:blank';
+          }
+          this.previewData = null;
         },
 
         // 历史记录相关
@@ -2255,8 +2364,8 @@
         document.addEventListener('keydown', (e) => {
           // Ctrl+V 已通过 paste 事件处理
           // Escape 关闭预览
-          if (e.key === 'Escape' && this.previewUrl) {
-            this.previewUrl = null;
+          if (e.key === 'Escape' && this.previewData) {
+            this.closePreview();
           }
         });
       }
