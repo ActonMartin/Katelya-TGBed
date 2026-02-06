@@ -1,5 +1,5 @@
 export async function onRequest(context) {
-  const { env, params } = context;
+  const { request, env, params } = context;
   let fileId = params.id;
 
   try {
@@ -45,6 +45,9 @@ export async function onRequest(context) {
       await env.img_url.delete(kvKey);
       console.log('Deleted R2 object and KV metadata:', { r2Key, kvKey });
 
+      // 清除 Cloudflare CDN 边缘缓存，防止删除后图片仍可访问
+      await purgeEdgeCache(request, fileId);
+
       return jsonResponse({
         success: true,
         message: 'Deleted from R2 and KV.',
@@ -80,6 +83,9 @@ export async function onRequest(context) {
     } finally {
       await env.img_url.delete(kvKey);
       console.log('KV metadata deleted:', kvKey);
+
+      // 清除 Cloudflare CDN 边缘缓存，防止删除后图片仍可访问
+      await purgeEdgeCache(request, fileId);
     }
 
     return jsonResponse({
@@ -149,6 +155,25 @@ async function deleteTelegramMessage(messageId, env) {
   } catch (error) {
     console.error('Telegram delete message error:', error);
     return false;
+  }
+}
+
+// 清除 Cloudflare CDN 边缘缓存中对应文件的条目
+async function purgeEdgeCache(request, fileId) {
+  try {
+    const cache = caches.default;
+    const origin = new URL(request.url).origin;
+    // 清除所有可能的缓存 URL 变体
+    const urlsToPurge = [
+      `${origin}/file/${fileId}`,
+      `${origin}/file/${encodeURIComponent(fileId)}`,
+    ];
+    for (const url of urlsToPurge) {
+      await cache.delete(new Request(url));
+    }
+    console.log('Edge cache purged for:', fileId);
+  } catch (e) {
+    console.warn('Edge cache purge failed (non-critical):', e.message);
   }
 }
 

@@ -70,6 +70,8 @@ function addCorsHeaders(headers) {
     headers.set('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
     headers.set('Access-Control-Allow-Headers', 'Range, Content-Type, Accept, Origin');
     headers.set('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges, Content-Type, Content-Disposition');
+    // 同时阻止 Cloudflare CDN 边缘缓存，防止删除后仍从边缘返回旧响应
+    headers.set('CDN-Cache-Control', 'no-store');
     return headers;
 }
 
@@ -203,10 +205,11 @@ export async function onRequest(context) {
         console.log('Range request:', rangeHeader);
     }
 
-    // 发起请求到 Telegram
+    // 发起请求到 Telegram（禁用 Cloudflare 边缘缓存，确保删除后立即生效）
     const response = await fetch(fileUrl, {
         method: request.method === 'HEAD' ? 'HEAD' : 'GET',
         headers: fetchHeaders,
+        cf: { cacheTtl: 0, cacheEverything: false },
     });
 
     // If the response is not OK (excluding 206 Partial Content), return error
@@ -334,6 +337,7 @@ async function handleStreamableFile(fileUrl, fileName, mimeType, rangeHeader, or
     let response = await fetch(fileUrl, {
         method: 'GET',
         headers: fetchHeaders,
+        cf: { cacheTtl: 0, cacheEverything: false },
     });
     
     // 检查上游是否支持 Range 请求

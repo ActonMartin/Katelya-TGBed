@@ -728,8 +728,9 @@
       left: 0;
       right: 0;
       bottom: 0;
-      background: rgba(0, 0, 0, 0.9);
+      background: rgba(0, 0, 0, 0.92);
       display: flex;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
       z-index: 1000;
@@ -737,15 +738,16 @@
     }
 
     .preview-modal img {
-      max-width: 100%;
-      max-height: 100%;
+      max-width: 90%;
+      max-height: 75vh;
       border-radius: 8px;
+      object-fit: contain;
     }
 
-    /* iframe 容器 - 90% 宽度，80% 高度 */
+    /* iframe 容器 - 90% 宽度，75% 高度（为底部操作栏留空间） */
     .preview-modal .iframe-container {
       width: 90vw;
-      height: 80vh;
+      height: 75vh;
       position: relative;
       border-radius: 8px;
       overflow: hidden;
@@ -776,6 +778,54 @@
     .preview-close:hover {
       background: rgba(255, 255, 255, 0.4);
       transform: rotate(90deg);
+    }
+
+    .preview-toolbar {
+      margin-top: 16px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 10px 20px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+    }
+    .preview-filename {
+      color: rgba(255, 255, 255, 0.7);
+      font-size: 0.9em;
+      max-width: 300px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .preview-btns {
+      display: flex;
+      gap: 8px;
+    }
+    .preview-btn {
+      padding: 6px 16px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.85em;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+    .preview-btn-primary {
+      background: var(--primary-color);
+      color: white;
+    }
+    .preview-btn-primary:hover {
+      background: var(--primary-dark);
+    }
+    .preview-btn-default {
+      background: rgba(255, 255, 255, 0.2);
+      color: white;
+    }
+    .preview-btn-default:hover {
+      background: rgba(255, 255, 255, 0.35);
     }
 
     /* 空状态 */
@@ -1501,7 +1551,7 @@
 
     <!-- 预览弹窗 - 原生图片 / iframe 预览 -->
     <div class="preview-modal" v-if="previewData" @click="closePreview">
-      <button class="preview-close" @click="closePreview">
+      <button class="preview-close" @click.stop="closePreview">
         <i class="fas fa-times"></i>
       </button>
       <!-- 原生图片预览 -->
@@ -1511,9 +1561,17 @@
         <iframe 
           ref="previewIframe"
           :src="previewData.iframeUrl"
-          allow="autoplay; fullscreen; encrypted-media"
+          allow="clipboard-write; autoplay; fullscreen; encrypted-media"
           allowfullscreen>
         </iframe>
+      </div>
+      <!-- 底部操作栏 -->
+      <div class="preview-toolbar" @click.stop>
+        <span class="preview-filename">{{ previewData.fileName }}</span>
+        <div class="preview-btns">
+          <button class="preview-btn preview-btn-primary" @click="copyPreviewLink"><i class="fas fa-copy"></i> 复制直链</button>
+          <button class="preview-btn preview-btn-default" @click="downloadPreviewFile"><i class="fas fa-download"></i> 下载</button>
+        </div>
       </div>
     </div>
 
@@ -2035,6 +2093,39 @@
             this.$refs.previewIframe.src = 'about:blank';
           }
           this.previewData = null;
+        },
+
+        // 复制预览文件的直链
+        copyPreviewLink() {
+          if (!this.previewData) return;
+          const link = this.previewData.url;
+          const fallback = () => {
+            const textarea = document.createElement('textarea');
+            textarea.value = link;
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+            this.showToast('直链已复制', 'success');
+          };
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(link)
+              .then(() => this.showToast('直链已复制', 'success'))
+              .catch(() => fallback());
+          } else {
+            fallback();
+          }
+        },
+
+        // 下载预览中的文件
+        downloadPreviewFile() {
+          if (!this.previewData) return;
+          const a = document.createElement('a');
+          a.href = this.previewData.url;
+          a.download = this.previewData.fileName || 'download';
+          a.click();
         },
 
         // 历史记录相关
