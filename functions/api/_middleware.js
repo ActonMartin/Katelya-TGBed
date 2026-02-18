@@ -1,4 +1,3 @@
-import { authenticator } from '../utils/auth';
-import { decode } from '../utils/decode';
+import { errorHandling, telemetryData } from '../utils/middleware';
 
-export const onRequest = [decode, authenticator];
+export const onRequest = [errorHandling, telemetryData];
