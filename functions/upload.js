@@ -12,9 +12,6 @@ export async function onRequestPost(context) {
         const clonedRequest = request.clone();
         const formData = await clonedRequest.formData();
 
-        await errorHandling(context);
-        telemetryData(context);
-
         const uploadFile = formData.get('file');
         if (!uploadFile) {
             throw new Error('No file uploaded');
